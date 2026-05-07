@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>流行乐节奏训练</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <div class="assignment">流行乐鉴赏作业—2 作者：梁宇煊</div>
+
+      <section class="view active" id="view-rhythm">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">METRONOME</p>
+            <h1>单节奏卡点</h1>
+            <p class="subtitle">设置速度和拍号，跟随钢琴节拍音与视觉脉冲做稳定卡点训练。</p>
+          </div>
+          <div class="bpm-badge"><span id="rhythmBpmBadge">90</span> BPM</div>
+        </header>
+
+        <section class="panel beat-stage">
+          <div class="pulse" id="rhythmPulse">
+            <span id="rhythmBeat">1</span>
+          </div>
+          <p id="rhythmCaption">4/4 · 第 1 拍</p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">速度</div>
+          <div class="row">
+            <span class="label">BPM</span>
+            <strong id="rhythmBpmValue">90</strong>
+          </div>
+          <input id="rhythmBpm" type="range" min="40" max="220" step="1" value="90" />
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">拍号</div>
+          <select id="rhythmMeter">
+            <option value="2/4">2/4</option>
+            <option value="3/4">3/4</option>
+            <option value="4/4" selected>4/4</option>
+            <option value="6/8">6/8</option>
+          </select>
+        </section>
+
+        <div class="button-row">
+          <button class="secondary" id="rhythmReset">重置</button>
+          <button class="primary" id="rhythmToggle">开始</button>
+        </div>
+      </section>
+
+      <section class="view" id="view-music">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">PLAYLIST</p>
+            <h1>音乐节拍</h1>
+            <p class="subtitle">精选 5 位歌手各 2 首歌曲做跟拍练习，音乐文件来自项目 src/music。</p>
+          </div>
+        </header>
+
+        <section class="panel">
+          <div class="panel-title">曲目</div>
+          <select id="musicSong"></select>
+          <p class="song-meta" id="musicMeta"></p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">节拍参考</div>
+          <div class="meter-grid" id="musicBeatGrid"></div>
+          <p class="music-path" id="musicPath"></p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">练习设置</div>
+          <label class="switch-line">
+            <span>跟拍提示</span>
+            <input type="checkbox" id="musicGuide" checked />
+          </label>
+          <div class="row">
+            <span class="label">开始前预备</span>
+            <strong><span id="countInValue">4</span> 拍</strong>
+          </div>
+          <input id="countIn" type="range" min="0" max="8" step="1" value="4" />
+        </section>
+
+        <div class="button-row">
+          <button class="secondary" id="previewBeat">试听节拍</button>
+          <button class="primary" id="musicToggle">播放</button>
+        </div>
+      </section>
+
+      <section class="view" id="view-score">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">ASSESSMENT</p>
+            <h1>训练打分</h1>
+            <p class="subtitle">选择单节奏或音乐节拍，对着节拍点击打分区，系统按时间偏差给分。</p>
+          </div>
+        </header>
+
+        <section class="panel">
+          <div class="segmented">
+            <button class="segment active" data-score-mode="rhythm">单节奏</button>
+            <button class="segment" data-score-mode="music">音乐节拍</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">节拍选择</div>
+          <div id="scoreRhythmSettings">
+            <div class="row">
+              <span class="label">目标 BPM</span>
+              <strong id="scoreBpmValue">90</strong>
+            </div>
+            <input id="scoreBpm" type="range" min="40" max="220" step="1" value="90" />
+          </div>
+          <div id="scoreMusicSettings" hidden>
+            <select id="scoreSong"></select>
+            <p class="song-meta" id="scoreMeta"></p>
+          </div>
+        </section>
+
+        <section class="panel score-panel">
+          <div class="score-number" id="scoreNumber">--</div>
+          <p class="subtitle" id="scoreStatus">开始后跟随提示点击打分区</p>
+          <button class="tap-pad" id="tapPad">准备开始</button>
+        </section>
+
+        <section class="stats-grid">
+          <div class="stat"><strong id="tapCount">0</strong><span>点击数</span></div>
+          <div class="stat"><strong id="avgOffset">--</strong><span>平均偏差</span></div>
+          <div class="stat"><strong id="bestOffset">--</strong><span>最佳偏差</span></div>
+        </section>
+
+        <div class="button-row">
+          <button class="secondary" id="scoreReset">清空</button>
+          <button class="primary" id="scoreToggle">开始</button>
+        </div>
+      </section>
+    </main>
+
+    <nav class="tabbar">
+      <button class="tab active" data-view="rhythm">
+        <img src="./src/icons/rhythm-active.png" alt="" />
+        <span>单节奏</span>
+      </button>
+      <button class="tab" data-view="music">
+        <img src="./src/icons/music.png" alt="" />
+        <span>音乐节拍</span>
+      </button>
+      <button class="tab" data-view="score">
+        <img src="./src/icons/score.png" alt="" />
+        <span>训练打分</span>
+      </button>
+    </nav>
+
+    <audio id="clickAudio" preload="auto" src="./src/audio/piano-click.wav"></audio>
+    <audio id="musicAudio" preload="metadata"></audio>
+    <script src="./app.js"></script>
+  </body>
+</html>
