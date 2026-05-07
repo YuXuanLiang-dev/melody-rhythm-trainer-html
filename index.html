@@ -65,6 +65,7 @@
           <div class="panel-title">曲目</div>
           <select id="musicSong"></select>
           <p class="song-meta" id="musicMeta"></p>
+          <p class="song-meta" id="musicAnalysis"></p>
         </section>
 
         <section class="panel">
@@ -79,11 +80,7 @@
             <span>跟拍提示</span>
             <input type="checkbox" id="musicGuide" checked />
           </label>
-          <div class="row">
-            <span class="label">开始前预备</span>
-            <strong><span id="countInValue">4</span> 拍</strong>
-          </div>
-          <input id="countIn" type="range" min="0" max="8" step="1" value="4" />
+          <p class="song-meta">播放音乐时，系统会等歌曲真正开始后，再按音谱分析出的第一拍启动钢琴节拍。</p>
         </section>
 
         <div class="button-row">
@@ -120,6 +117,7 @@
           <div id="scoreMusicSettings" hidden>
             <select id="scoreSong"></select>
             <p class="song-meta" id="scoreMeta"></p>
+            <p class="song-meta" id="scoreAnalysis"></p>
           </div>
         </section>
 

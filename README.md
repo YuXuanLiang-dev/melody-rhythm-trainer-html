@@ -13,5 +13,7 @@
 - `src/audio/piano-click.wav`：钢琴节拍音
 - `src/icons/`：底部导航图标
 - `src/music/`：歌曲音频
+- `src/music/beat-analysis.json`：每首歌的 BPM、起拍偏移和时长分析结果
+- `tools/analyze_beats.py`：本地音频能量峰值分析脚本
 
 页面入口是 `index.html`。

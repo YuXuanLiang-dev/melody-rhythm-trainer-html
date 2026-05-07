@@ -1,14 +1,14 @@
 const songs = [
-  { title: '晴天', artist: '周杰伦', bpm: 92, meter: '4/4', src: './src/music/jay-chou-qing-tian.mp3' },
-  { title: '稻香', artist: '周杰伦', bpm: 86, meter: '4/4', src: './src/music/jay-chou-dao-xiang.mp3' },
-  { title: '江南', artist: '林俊杰', bpm: 78, meter: '4/4', src: './src/music/jj-lin-jiang-nan.mp3' },
-  { title: '修炼爱情', artist: '林俊杰', bpm: 70, meter: '4/4', src: './src/music/jj-lin-xiu-lian-ai-qing.mp3' },
-  { title: '光年之外', artist: '邓紫棋', bpm: 88, meter: '4/4', src: './src/music/gem-guang-nian-zhi-wai.mp3' },
-  { title: '泡沫', artist: '邓紫棋', bpm: 82, meter: '4/4', src: './src/music/gem-pao-mo.mp3' },
-  { title: '带我去找夜生活', artist: '告五人', bpm: 122, meter: '4/4', src: './src/music/accusefive-night-life.mp3' },
-  { title: '披星戴月的想你', artist: '告五人', bpm: 94, meter: '4/4', src: './src/music/accusefive-missing-you.mp3' },
-  { title: 'Love Story', artist: 'Taylor Swift', bpm: 120, meter: '4/4', src: './src/music/taylor-swift-love-story.mp3' },
-  { title: 'Shake It Off', artist: 'Taylor Swift', bpm: 160, meter: '4/4', src: './src/music/taylor-swift-shake-it-off.mp3' }
+  { title: '晴天', artist: '周杰伦', bpm: 92, meter: '4/4', firstBeatOffset: 0.221, duration: 269.7, src: './src/music/jay-chou-qing-tian.mp3' },
+  { title: '稻香', artist: '周杰伦', bpm: 86, meter: '4/4', firstBeatOffset: 0.449, duration: 223.5, src: './src/music/jay-chou-dao-xiang.mp3' },
+  { title: '江南', artist: '林俊杰', bpm: 78, meter: '4/4', firstBeatOffset: 0.632, duration: 267.9, src: './src/music/jj-lin-jiang-nan.mp3' },
+  { title: '修炼爱情', artist: '林俊杰', bpm: 70, meter: '4/4', firstBeatOffset: 0.328, duration: 287.0, src: './src/music/jj-lin-xiu-lian-ai-qing.mp3' },
+  { title: '光年之外', artist: '邓紫棋', bpm: 88, meter: '4/4', firstBeatOffset: 0.680, duration: 235.5, src: './src/music/gem-guang-nian-zhi-wai.mp3' },
+  { title: '泡沫', artist: '邓紫棋', bpm: 82, meter: '4/4', firstBeatOffset: 0.534, duration: 258.9, src: './src/music/gem-pao-mo.mp3' },
+  { title: '带我去找夜生活', artist: '告五人', bpm: 122, meter: '4/4', firstBeatOffset: 0.490, duration: 299.7, src: './src/music/accusefive-night-life.mp3' },
+  { title: '披星戴月的想你', artist: '告五人', bpm: 94, meter: '4/4', firstBeatOffset: 0.536, duration: 349.0, src: './src/music/accusefive-missing-you.mp3' },
+  { title: 'Love Story', artist: 'Taylor Swift', bpm: 120, meter: '4/4', firstBeatOffset: 0.485, duration: 236.3, src: './src/music/taylor-swift-love-story.mp3' },
+  { title: 'Shake It Off', artist: 'Taylor Swift', bpm: 160, meter: '4/4', firstBeatOffset: 0.092, duration: 281.3, src: './src/music/taylor-swift-shake-it-off.mp3' }
 ]
 
 const $ = selector => document.querySelector(selector)
@@ -22,12 +22,15 @@ const state = {
   rhythmBeat: 1,
   musicGuideTimer: null,
   musicCountTimer: null,
+  musicGuideStartTimer: null,
   musicPreviewing: false,
   musicPlaying: false,
   scoreTimer: null,
   scoreStartTimer: null,
+  scoreGuideStartTimer: null,
   scoreMode: 'rhythm',
   scoreStartAt: 0,
+  scoreRunning: false,
   taps: []
 }
 
@@ -61,6 +64,7 @@ function currentScoreSong() {
 function renderMusicSong() {
   const song = currentMusicSong()
   $('#musicMeta').textContent = `${song.artist} · ${song.bpm} BPM · ${song.meter}`
+  $('#musicAnalysis').textContent = `音谱分析：起拍偏移 ${song.firstBeatOffset.toFixed(3)} 秒 · 时长 ${song.duration.toFixed(1)} 秒`
   $('#musicPath').textContent = `文件路径：${song.src}`
   musicAudio.src = song.src
   renderBeatGrid(song.meter, -1)
@@ -69,6 +73,7 @@ function renderMusicSong() {
 function renderScoreSong() {
   const song = currentScoreSong()
   $('#scoreMeta').textContent = `${song.artist} · ${song.bpm} BPM · ${song.meter}`
+  $('#scoreAnalysis').textContent = `音谱分析：起拍偏移 ${song.firstBeatOffset.toFixed(3)} 秒 · 时长 ${song.duration.toFixed(1)} 秒`
 }
 
 function renderBeatGrid(meter, activeIndex) {
@@ -178,34 +183,72 @@ function startMusic() {
   stopMusic()
   const song = currentMusicSong()
   const interval = intervalFromBpm(song.bpm)
-  let remaining = Number($('#countIn').value)
   state.musicPlaying = true
   $('#musicToggle').textContent = '停止'
   $('#musicToggle').classList.add('danger')
 
-  const begin = () => {
-    musicAudio.currentTime = 0
-    musicAudio.play().catch(() => {})
+  const beginGuide = () => {
+    if (!state.musicPlaying) return
     let beat = 0
+    musicPulse(beat)
     state.musicGuideTimer = setInterval(() => {
       beat += 1
       musicPulse(beat)
     }, interval)
   }
 
-  if (!remaining) {
-    begin()
-    return
+  musicAudio.src = song.src
+  musicAudio.currentTime = 0
+  musicAudio.onplaying = () => {
+    if (!state.musicPlaying) return
+    clearTimeout(state.musicGuideStartTimer)
+    state.musicGuideStartTimer = setTimeout(beginGuide, song.firstBeatOffset * 1000)
   }
+  musicAudio.play().catch(() => {
+    stopMusic()
+    $('#musicPath').textContent = '浏览器阻止了自动播放，请再次点击播放。'
+  })
+}
 
-  musicPulse(0)
-  state.musicCountTimer = setInterval(() => {
+function startScoreGuide(interval) {
+  let beat = 0
+  playClick()
+  state.scoreTimer = setInterval(() => {
+    beat += 1
+    playClick()
+  }, interval)
+}
+
+function startScoreMusic(song, interval) {
+  musicAudio.src = song.src
+  musicAudio.currentTime = 0
+  state.scoreStartAt = 0
+  musicAudio.onplaying = () => {
+    if (!state.scoreRunning) return
+    const offsetMs = song.firstBeatOffset * 1000
+    state.scoreStartAt = Date.now() + offsetMs
+    clearTimeout(state.scoreGuideStartTimer)
+    state.scoreGuideStartTimer = setTimeout(() => startScoreGuide(interval), offsetMs)
+  }
+  musicAudio.play().catch(() => {
+    stopScore()
+    $('#scoreStatus').textContent = '浏览器阻止了自动播放，请再次点击开始。'
+  })
+}
+
+function startScoreRhythm(interval) {
+  const countInBeats = 4
+  state.scoreStartAt = Date.now() + interval * countInBeats
+  state.scoreGuideStartTimer = setTimeout(() => {
+    if (state.scoreStartAt) startScoreGuide(interval)
+  }, interval * countInBeats)
+  let remaining = countInBeats
+  state.scoreStartTimer = setInterval(() => {
     remaining -= 1
-    musicPulse(Number($('#countIn').value) - remaining)
+    playClick()
     if (remaining <= 0) {
-      clearInterval(state.musicCountTimer)
-      state.musicCountTimer = null
-      begin()
+      clearInterval(state.scoreStartTimer)
+      state.scoreStartTimer = null
     }
   }, interval)
 }
@@ -213,10 +256,13 @@ function startMusic() {
 function stopMusic() {
   clearInterval(state.musicGuideTimer)
   clearInterval(state.musicCountTimer)
+  clearTimeout(state.musicGuideStartTimer)
   state.musicGuideTimer = null
   state.musicCountTimer = null
+  state.musicGuideStartTimer = null
   state.musicPreviewing = false
   state.musicPlaying = false
+  musicAudio.onplaying = null
   musicAudio.pause()
   musicAudio.currentTime = 0
   $('#previewBeat').textContent = '试听节拍'
@@ -231,8 +277,13 @@ $('#musicSong').addEventListener('change', () => {
   stopMusic()
   renderMusicSong()
 })
-$('#countIn').addEventListener('input', () => $('#countInValue').textContent = $('#countIn').value)
-musicAudio.addEventListener('ended', stopMusic)
+musicAudio.addEventListener('ended', () => {
+  if (state.scoreRunning) {
+    stopScore()
+  } else {
+    stopMusic()
+  }
+})
 
 function setScoreMode(mode) {
   stopScore()
@@ -251,10 +302,10 @@ function startScore() {
   stopScore()
   state.taps = []
   const interval = intervalFromBpm(currentScoreBpm())
-  const countInBeats = 4
-  state.scoreStartAt = Date.now() + interval * countInBeats
+  state.scoreRunning = true
+  state.scoreStartAt = state.scoreMode === 'music' ? 0 : Date.now()
   $('#scoreNumber').textContent = '0'
-  $('#scoreStatus').textContent = '预备 4 拍后开始，保持稳定点击'
+  $('#scoreStatus').textContent = state.scoreMode === 'music' ? '音乐开始后自动对齐第一拍' : '预备 4 拍后开始，保持稳定点击'
   $('#tapCount').textContent = '0'
   $('#avgOffset').textContent = '--'
   $('#bestOffset').textContent = '--'
@@ -263,26 +314,23 @@ function startScore() {
   $('#scoreToggle').textContent = '结束'
   $('#scoreToggle').classList.add('danger')
 
-  let beat = 0
-  state.scoreTimer = setInterval(() => {
-    beat += 1
-    playClick()
-  }, interval)
-
   if (state.scoreMode === 'music') {
-    musicAudio.src = currentScoreSong().src
-    state.scoreStartTimer = setTimeout(() => {
-      musicAudio.currentTime = 0
-      musicAudio.play().catch(() => {})
-    }, interval * countInBeats)
+    startScoreMusic(currentScoreSong(), interval)
+  } else {
+    startScoreRhythm(interval)
   }
 }
 
 function stopScore() {
   clearInterval(state.scoreTimer)
-  clearTimeout(state.scoreStartTimer)
+  clearInterval(state.scoreStartTimer)
+  clearTimeout(state.scoreGuideStartTimer)
   state.scoreTimer = null
   state.scoreStartTimer = null
+  state.scoreGuideStartTimer = null
+  state.scoreStartAt = 0
+  state.scoreRunning = false
+  musicAudio.onplaying = null
   musicAudio.pause()
   $('#tapPad').textContent = '准备开始'
   $('#tapPad').classList.remove('active')
@@ -301,8 +349,12 @@ function resetScore() {
 }
 
 function recordTap() {
-  if (!state.scoreTimer) {
+  if (!state.scoreRunning) {
     $('#scoreStatus').textContent = '请先开始训练'
+    return
+  }
+  if (!state.scoreStartAt) {
+    $('#scoreStatus').textContent = '等待音乐开始'
     return
   }
   const now = Date.now()
@@ -328,7 +380,7 @@ function recordTap() {
 $$('[data-score-mode]').forEach(button => button.addEventListener('click', () => setScoreMode(button.dataset.scoreMode)))
 $('#scoreBpm').addEventListener('input', () => $('#scoreBpmValue').textContent = $('#scoreBpm').value)
 $('#scoreSong').addEventListener('change', renderScoreSong)
-$('#scoreToggle').addEventListener('click', () => state.scoreTimer ? stopScore() : startScore())
+$('#scoreToggle').addEventListener('click', () => state.scoreRunning ? stopScore() : startScore())
 $('#scoreReset').addEventListener('click', resetScore)
 $('#tapPad').addEventListener('click', recordTap)
 
