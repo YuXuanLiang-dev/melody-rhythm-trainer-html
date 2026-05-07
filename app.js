@@ -23,14 +23,20 @@ const state = {
   musicGuideTimer: null,
   musicCountTimer: null,
   musicGuideStartTimer: null,
+  musicContextStartedAt: 0,
+  musicNextBeatNumber: 0,
   musicPreviewing: false,
   musicPlaying: false,
   scoreTimer: null,
   scoreStartTimer: null,
   scoreGuideStartTimer: null,
+  scoreNextBeatNumber: 0,
   scoreMode: 'rhythm',
   scoreStartAt: 0,
   scoreRunning: false,
+  audioContext: null,
+  clickBuffer: null,
+  clickBufferLoading: null,
   taps: []
 }
 
@@ -64,9 +70,53 @@ function setBeatOffset(song, value) {
   return offset
 }
 
+async function ensureAudioEngine() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext
+  if (!state.audioContext && AudioContextClass) {
+    state.audioContext = new AudioContextClass()
+  }
+  if (state.audioContext && state.audioContext.state === 'suspended') {
+    await state.audioContext.resume()
+  }
+  if (state.audioContext && !state.clickBuffer) {
+    if (!state.clickBufferLoading) {
+      state.clickBufferLoading = fetch('./src/audio/piano-click.wav')
+        .then(response => response.arrayBuffer())
+        .then(buffer => state.audioContext.decodeAudioData(buffer))
+        .then(decoded => {
+          state.clickBuffer = decoded
+          return decoded
+        })
+        .catch(() => null)
+    }
+    await state.clickBufferLoading
+  }
+}
+
+function scheduleClickAt(contextTime, gainValue = 0.9) {
+  if (!state.audioContext || !state.clickBuffer) {
+    clickAudio.currentTime = 0
+    clickAudio.play().catch(() => {})
+    return
+  }
+  const source = state.audioContext.createBufferSource()
+  const gain = state.audioContext.createGain()
+  source.buffer = state.clickBuffer
+  gain.gain.value = gainValue
+  source.connect(gain)
+  gain.connect(state.audioContext.destination)
+  source.start(Math.max(contextTime, state.audioContext.currentTime + 0.002))
+}
+
 function playClick() {
-  clickAudio.currentTime = 0
-  clickAudio.play().catch(() => {})
+  ensureAudioEngine().then(() => {
+    if (state.audioContext) {
+      scheduleClickAt(state.audioContext.currentTime + 0.004)
+    } else {
+      clickAudio.currentTime = 0
+      clickAudio.play().catch(() => {})
+    }
+  })
   if (navigator.vibrate) navigator.vibrate(28)
 }
 
@@ -199,33 +249,50 @@ function nextBeatNumber(song) {
   return Math.max(0, Math.ceil((current - offset + 0.025) / interval))
 }
 
-function scheduleMusicGuide(song, requestedBeatNumber) {
-  if (!state.musicPlaying) return
-  const interval = intervalSeconds(song)
-  const beatNumber = requestedBeatNumber ?? nextBeatNumber(song)
-  const beatTime = getBeatOffset(song) + beatNumber * interval
-  const delay = Math.max(0, (beatTime - musicAudio.currentTime) * 1000)
+function contextTimeForAudioTime(audioTime) {
+  return state.musicContextStartedAt + audioTime
+}
 
-  state.musicGuideTimer = setTimeout(() => {
-    if (!state.musicPlaying) return
-    renderBeatGrid(song.meter, beatNumber % Number(song.meter.split('/')[0]))
-    if ($('#musicGuide').checked) playClick()
-    scheduleMusicGuide(song, beatNumber + 1)
+function scheduleMusicVisual(song, beatNumber, contextTime) {
+  const delay = Math.max(0, (contextTime - state.audioContext.currentTime) * 1000)
+  setTimeout(() => {
+    if (state.musicPlaying) {
+      renderBeatGrid(song.meter, beatNumber % Number(song.meter.split('/')[0]))
+    }
   }, delay)
 }
 
-function scheduleScoreMusicGuide(song, requestedBeatNumber) {
+function scheduleMusicGuide(song) {
+  if (!state.musicPlaying) return
+  const interval = intervalSeconds(song)
+  const scheduleAhead = 0.14
+
+  while (state.musicPlaying) {
+    const beatTime = getBeatOffset(song) + state.musicNextBeatNumber * interval
+    const contextTime = contextTimeForAudioTime(beatTime)
+    if (!state.audioContext || contextTime > state.audioContext.currentTime + scheduleAhead) break
+    if (contextTime >= state.audioContext.currentTime - 0.03) {
+      if ($('#musicGuide').checked) scheduleClickAt(contextTime)
+      scheduleMusicVisual(song, state.musicNextBeatNumber, contextTime)
+    }
+    state.musicNextBeatNumber += 1
+  }
+}
+
+function scheduleScoreMusicGuide(song) {
   if (!state.scoreRunning) return
   const interval = intervalSeconds(song)
-  const beatNumber = requestedBeatNumber ?? nextBeatNumber(song)
-  const beatTime = getBeatOffset(song) + beatNumber * interval
-  const delay = Math.max(0, (beatTime - musicAudio.currentTime) * 1000)
+  const scheduleAhead = 0.14
 
-  state.scoreTimer = setTimeout(() => {
-    if (!state.scoreRunning) return
-    playClick()
-    scheduleScoreMusicGuide(song, beatNumber + 1)
-  }, delay)
+  while (state.scoreRunning) {
+    const beatTime = getBeatOffset(song) + state.scoreNextBeatNumber * interval
+    const contextTime = contextTimeForAudioTime(beatTime)
+    if (!state.audioContext || contextTime > state.audioContext.currentTime + scheduleAhead) break
+    if (contextTime >= state.audioContext.currentTime - 0.03) {
+      scheduleClickAt(contextTime)
+    }
+    state.scoreNextBeatNumber += 1
+  }
 }
 
 function previewMusicBeat() {
@@ -246,8 +313,9 @@ function previewMusicBeat() {
   }, intervalFromBpm(song.bpm))
 }
 
-function startMusic() {
+async function startMusic() {
   stopMusic()
+  await ensureAudioEngine()
   const song = currentMusicSong()
   state.musicPlaying = true
   $('#musicToggle').textContent = '停止'
@@ -257,8 +325,11 @@ function startMusic() {
   musicAudio.currentTime = 0
   musicAudio.onplaying = () => {
     if (!state.musicPlaying) return
-    clearTimeout(state.musicGuideTimer)
+    state.musicContextStartedAt = state.audioContext.currentTime - musicAudio.currentTime
+    state.musicNextBeatNumber = nextBeatNumber(song)
+    clearInterval(state.musicGuideTimer)
     scheduleMusicGuide(song)
+    state.musicGuideTimer = setInterval(() => scheduleMusicGuide(song), 25)
   }
   musicAudio.play().catch(() => {
     stopMusic()
@@ -275,15 +346,19 @@ function startScoreGuide(interval) {
   }, interval)
 }
 
-function startScoreMusic(song, interval) {
+async function startScoreMusic(song, interval) {
+  await ensureAudioEngine()
   musicAudio.src = song.src
   musicAudio.currentTime = 0
   state.scoreStartAt = 0
   musicAudio.onplaying = () => {
     if (!state.scoreRunning) return
     state.scoreStartAt = 1
-    clearTimeout(state.scoreTimer)
+    state.musicContextStartedAt = state.audioContext.currentTime - musicAudio.currentTime
+    state.scoreNextBeatNumber = nextBeatNumber(song)
+    clearInterval(state.scoreTimer)
     scheduleScoreMusicGuide(song)
+    state.scoreTimer = setInterval(() => scheduleScoreMusicGuide(song), 25)
   }
   musicAudio.play().catch(() => {
     stopScore()
