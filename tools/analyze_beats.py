@@ -8,15 +8,15 @@ import wave
 from array import array
 
 SONGS = [
-    ("晴天", 92, "src/music/jay-chou-qing-tian.mp3"),
-    ("稻香", 86, "src/music/jay-chou-dao-xiang.mp3"),
-    ("江南", 78, "src/music/jj-lin-jiang-nan.mp3"),
-    ("修炼爱情", 70, "src/music/jj-lin-xiu-lian-ai-qing.mp3"),
+    ("晴天", 93, "src/music/jay-chou-qing-tian.mp3"),
+    ("稻香", 85, "src/music/jay-chou-dao-xiang.mp3"),
+    ("江南", 79, "src/music/jj-lin-jiang-nan.mp3"),
+    ("修炼爱情", 69, "src/music/jj-lin-xiu-lian-ai-qing.mp3"),
     ("光年之外", 88, "src/music/gem-guang-nian-zhi-wai.mp3"),
-    ("泡沫", 82, "src/music/gem-pao-mo.mp3"),
-    ("带我去找夜生活", 122, "src/music/accusefive-night-life.mp3"),
-    ("披星戴月的想你", 94, "src/music/accusefive-missing-you.mp3"),
-    ("Love Story", 120, "src/music/taylor-swift-love-story.mp3"),
+    ("泡沫", 68, "src/music/gem-pao-mo.mp3"),
+    ("带我去找夜生活", 128, "src/music/accusefive-night-life.mp3"),
+    ("披星戴月的想你", 100, "src/music/accusefive-missing-you.mp3"),
+    ("Love Story", 119, "src/music/taylor-swift-love-story.mp3"),
     ("Shake It Off", 160, "src/music/taylor-swift-shake-it-off.mp3"),
 ]
 
@@ -56,6 +56,41 @@ def envelope(rate, data, hop=512):
         smooth.append(sum(env[a:b]) / (b - a))
     onset = [max(0.0, env[i] - smooth[i]) for i in range(len(env))]
     return onset
+
+
+def estimate_bpm(onset, rate, hop=512, min_bpm=55, max_bpm=180):
+    step = hop / rate
+    if not onset:
+        return 0.0, []
+
+    mean = sum(onset) / len(onset)
+    centered = [max(0.0, value - mean) for value in onset]
+    scores = []
+    for bpm in [min_bpm + i * 0.5 for i in range(int((max_bpm - min_bpm) * 2) + 1)]:
+        lag = int(round((60.0 / bpm) / step))
+        if lag <= 1 or lag >= len(centered):
+            continue
+        score = 0.0
+        count = 0
+        # Skip intro silence and use the main body.
+        start = int(6 / step)
+        end = min(len(centered) - lag, int(160 / step))
+        for i in range(start, end):
+            score += centered[i] * centered[i + lag]
+            count += 1
+        if count:
+            scores.append((score / count, bpm))
+    scores.sort(reverse=True)
+    top = []
+    used = []
+    for score, bpm in scores:
+        if any(abs(bpm - item) < 3 or abs(bpm - item * 2) < 3 or abs(bpm * 2 - item) < 3 for item in used):
+            continue
+        used.append(bpm)
+        top.append({"bpm": round(bpm, 1), "score": round(score, 2)})
+        if len(top) >= 5:
+            break
+    return (top[0]["bpm"] if top else 0.0), top
 
 
 def estimate_offset(onset, rate, bpm, hop=512, search_seconds=12):
@@ -107,11 +142,14 @@ def main():
             convert_to_wav(path, wav_path)
             rate, data = read_mono(wav_path)
             env = envelope(rate, data)
+            estimated_bpm, bpm_candidates = estimate_bpm(env, rate)
             offset, score = estimate_offset(env, rate, bpm)
             duration = len(data) / rate
             results.append({
                 "title": title,
                 "bpm": bpm,
+                "estimatedBpm": estimated_bpm,
+                "bpmCandidates": bpm_candidates,
                 "firstBeatOffset": offset,
                 "analysisScore": score,
                 "duration": round(duration, 1),

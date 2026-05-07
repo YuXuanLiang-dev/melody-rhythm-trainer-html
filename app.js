@@ -1,13 +1,13 @@
 const songs = [
-  { title: '晴天', artist: '周杰伦', bpm: 92, meter: '4/4', firstBeatOffset: 0.221, duration: 269.7, src: './src/music/jay-chou-qing-tian.mp3' },
-  { title: '稻香', artist: '周杰伦', bpm: 86, meter: '4/4', firstBeatOffset: 0.449, duration: 223.5, src: './src/music/jay-chou-dao-xiang.mp3' },
-  { title: '江南', artist: '林俊杰', bpm: 78, meter: '4/4', firstBeatOffset: 0.632, duration: 267.9, src: './src/music/jj-lin-jiang-nan.mp3' },
-  { title: '修炼爱情', artist: '林俊杰', bpm: 70, meter: '4/4', firstBeatOffset: 0.328, duration: 287.0, src: './src/music/jj-lin-xiu-lian-ai-qing.mp3' },
+  { title: '晴天', artist: '周杰伦', bpm: 93, meter: '4/4', firstBeatOffset: 0.267, duration: 269.7, src: './src/music/jay-chou-qing-tian.mp3' },
+  { title: '稻香', artist: '周杰伦', bpm: 85, meter: '4/4', firstBeatOffset: 0.334, duration: 223.5, src: './src/music/jay-chou-dao-xiang.mp3' },
+  { title: '江南', artist: '林俊杰', bpm: 79, meter: '4/4', firstBeatOffset: 0.757, duration: 267.9, src: './src/music/jj-lin-jiang-nan.mp3' },
+  { title: '修炼爱情', artist: '林俊杰', bpm: 69, meter: '4/4', firstBeatOffset: 0.402, duration: 287.0, src: './src/music/jj-lin-xiu-lian-ai-qing.mp3' },
   { title: '光年之外', artist: '邓紫棋', bpm: 88, meter: '4/4', firstBeatOffset: 0.680, duration: 235.5, src: './src/music/gem-guang-nian-zhi-wai.mp3' },
-  { title: '泡沫', artist: '邓紫棋', bpm: 82, meter: '4/4', firstBeatOffset: 0.534, duration: 258.9, src: './src/music/gem-pao-mo.mp3' },
-  { title: '带我去找夜生活', artist: '告五人', bpm: 122, meter: '4/4', firstBeatOffset: 0.490, duration: 299.7, src: './src/music/accusefive-night-life.mp3' },
-  { title: '披星戴月的想你', artist: '告五人', bpm: 94, meter: '4/4', firstBeatOffset: 0.536, duration: 349.0, src: './src/music/accusefive-missing-you.mp3' },
-  { title: 'Love Story', artist: 'Taylor Swift', bpm: 120, meter: '4/4', firstBeatOffset: 0.485, duration: 236.3, src: './src/music/taylor-swift-love-story.mp3' },
+  { title: '泡沫', artist: '邓紫棋', bpm: 68, meter: '4/4', firstBeatOffset: 0.511, duration: 258.9, src: './src/music/gem-pao-mo.mp3' },
+  { title: '带我去找夜生活', artist: '告五人', bpm: 128, meter: '4/4', firstBeatOffset: 0.173, duration: 299.7, src: './src/music/accusefive-night-life.mp3' },
+  { title: '披星戴月的想你', artist: '告五人', bpm: 100, meter: '4/4', firstBeatOffset: 0.172, duration: 349.0, src: './src/music/accusefive-missing-you.mp3' },
+  { title: 'Love Story', artist: 'Taylor Swift', bpm: 119, meter: '4/4', firstBeatOffset: 0.421, duration: 236.3, src: './src/music/taylor-swift-love-story.mp3' },
   { title: 'Shake It Off', artist: 'Taylor Swift', bpm: 160, meter: '4/4', firstBeatOffset: 0.092, duration: 281.3, src: './src/music/taylor-swift-shake-it-off.mp3' }
 ]
 
@@ -43,7 +43,7 @@ function intervalSeconds(song) {
 }
 
 function songOffsetKey(song) {
-  return `beat-offset:${song.src}`
+  return `beat-offset-v2:${song.src}`
 }
 
 function normalizeOffset(value, interval) {
@@ -196,13 +196,13 @@ function nextBeatNumber(song) {
   const interval = intervalSeconds(song)
   const offset = getBeatOffset(song)
   const current = musicAudio.currentTime
-  return Math.max(0, Math.ceil((current - offset) / interval))
+  return Math.max(0, Math.ceil((current - offset + 0.025) / interval))
 }
 
-function scheduleMusicGuide(song) {
+function scheduleMusicGuide(song, requestedBeatNumber) {
   if (!state.musicPlaying) return
   const interval = intervalSeconds(song)
-  const beatNumber = nextBeatNumber(song)
+  const beatNumber = requestedBeatNumber ?? nextBeatNumber(song)
   const beatTime = getBeatOffset(song) + beatNumber * interval
   const delay = Math.max(0, (beatTime - musicAudio.currentTime) * 1000)
 
@@ -210,21 +210,21 @@ function scheduleMusicGuide(song) {
     if (!state.musicPlaying) return
     renderBeatGrid(song.meter, beatNumber % Number(song.meter.split('/')[0]))
     if ($('#musicGuide').checked) playClick()
-    scheduleMusicGuide(song)
+    scheduleMusicGuide(song, beatNumber + 1)
   }, delay)
 }
 
-function scheduleScoreMusicGuide(song) {
+function scheduleScoreMusicGuide(song, requestedBeatNumber) {
   if (!state.scoreRunning) return
   const interval = intervalSeconds(song)
-  const beatNumber = nextBeatNumber(song)
+  const beatNumber = requestedBeatNumber ?? nextBeatNumber(song)
   const beatTime = getBeatOffset(song) + beatNumber * interval
   const delay = Math.max(0, (beatTime - musicAudio.currentTime) * 1000)
 
   state.scoreTimer = setTimeout(() => {
     if (!state.scoreRunning) return
     playClick()
-    scheduleScoreMusicGuide(song)
+    scheduleScoreMusicGuide(song, beatNumber + 1)
   }, delay)
 }
 
@@ -405,6 +405,7 @@ function startScore() {
 
 function stopScore() {
   clearInterval(state.scoreTimer)
+  clearTimeout(state.scoreTimer)
   clearInterval(state.scoreStartTimer)
   clearTimeout(state.scoreGuideStartTimer)
   state.scoreTimer = null

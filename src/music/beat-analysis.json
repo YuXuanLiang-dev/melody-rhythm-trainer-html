@@ -1,12 +1,12 @@
 [
-  { "title": "晴天", "artist": "周杰伦", "bpm": 92, "firstBeatOffset": 0.221, "duration": 269.7 },
-  { "title": "稻香", "artist": "周杰伦", "bpm": 86, "firstBeatOffset": 0.449, "duration": 223.5 },
-  { "title": "江南", "artist": "林俊杰", "bpm": 78, "firstBeatOffset": 0.632, "duration": 267.9 },
-  { "title": "修炼爱情", "artist": "林俊杰", "bpm": 70, "firstBeatOffset": 0.328, "duration": 287.0 },
+  { "title": "晴天", "artist": "周杰伦", "bpm": 93, "firstBeatOffset": 0.267, "duration": 269.7 },
+  { "title": "稻香", "artist": "周杰伦", "bpm": 85, "firstBeatOffset": 0.334, "duration": 223.5 },
+  { "title": "江南", "artist": "林俊杰", "bpm": 79, "firstBeatOffset": 0.757, "duration": 267.9 },
+  { "title": "修炼爱情", "artist": "林俊杰", "bpm": 69, "firstBeatOffset": 0.402, "duration": 287.0 },
   { "title": "光年之外", "artist": "邓紫棋", "bpm": 88, "firstBeatOffset": 0.68, "duration": 235.5 },
-  { "title": "泡沫", "artist": "邓紫棋", "bpm": 82, "firstBeatOffset": 0.534, "duration": 258.9 },
-  { "title": "带我去找夜生活", "artist": "告五人", "bpm": 122, "firstBeatOffset": 0.49, "duration": 299.7 },
-  { "title": "披星戴月的想你", "artist": "告五人", "bpm": 94, "firstBeatOffset": 0.536, "duration": 349.0 },
-  { "title": "Love Story", "artist": "Taylor Swift", "bpm": 120, "firstBeatOffset": 0.485, "duration": 236.3 },
+  { "title": "泡沫", "artist": "邓紫棋", "bpm": 68, "firstBeatOffset": 0.511, "duration": 258.9 },
+  { "title": "带我去找夜生活", "artist": "告五人", "bpm": 128, "firstBeatOffset": 0.173, "duration": 299.7 },
+  { "title": "披星戴月的想你", "artist": "告五人", "bpm": 100, "firstBeatOffset": 0.172, "duration": 349.0 },
+  { "title": "Love Story", "artist": "Taylor Swift", "bpm": 119, "firstBeatOffset": 0.421, "duration": 236.3 },
   { "title": "Shake It Off", "artist": "Taylor Swift", "bpm": 160, "firstBeatOffset": 0.092, "duration": 281.3 }
 ]
