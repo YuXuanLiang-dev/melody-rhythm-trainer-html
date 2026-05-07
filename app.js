@@ -45,18 +45,41 @@ function intervalFromBpm(bpm) {
 }
 
 function intervalSeconds(song) {
-  return 60 / song.bpm
+  return 60 / getSongBpm(song)
 }
 
 function songOffsetKey(song) {
   return `beat-offset-v2:${song.src}`
 }
 
+function songAnalysisKey(song) {
+  return `beat-analysis-v1:${song.src}`
+}
+
 function normalizeOffset(value, interval) {
   return ((value % interval) + interval) % interval
 }
 
+function getStoredAnalysis(song) {
+  try {
+    const raw = localStorage.getItem(songAnalysisKey(song))
+    const parsed = raw ? JSON.parse(raw) : null
+    if (parsed && Number.isFinite(parsed.bpm) && Number.isFinite(parsed.offset)) {
+      return parsed
+    }
+  } catch (error) {
+    return null
+  }
+  return null
+}
+
+function getSongBpm(song) {
+  return getStoredAnalysis(song)?.bpm || song.bpm
+}
+
 function getBeatOffset(song) {
+  const analyzed = getStoredAnalysis(song)
+  if (analyzed) return analyzed.offset
   const saved = localStorage.getItem(songOffsetKey(song))
   const parsed = saved === null ? NaN : Number(saved)
   return Number.isFinite(parsed) ? parsed : song.firstBeatOffset
@@ -65,9 +88,28 @@ function getBeatOffset(song) {
 function setBeatOffset(song, value) {
   const offset = normalizeOffset(value, intervalSeconds(song))
   localStorage.setItem(songOffsetKey(song), String(offset))
+  const analyzed = getStoredAnalysis(song)
+  if (analyzed) {
+    localStorage.setItem(songAnalysisKey(song), JSON.stringify({ ...analyzed, offset }))
+  }
   renderMusicSong()
   renderScoreSong()
   return offset
+}
+
+function setSongAnalysis(song, bpm, offset, source = 'web-audio-beat-detector') {
+  const normalizedBpm = Math.round(Number(bpm))
+  const normalizedOffset = normalizeOffset(Number(offset), 60 / normalizedBpm)
+  localStorage.setItem(songAnalysisKey(song), JSON.stringify({
+    bpm: normalizedBpm,
+    offset: normalizedOffset,
+    source,
+    savedAt: new Date().toISOString()
+  }))
+  localStorage.setItem(songOffsetKey(song), String(normalizedOffset))
+  refreshSongSelects()
+  renderMusicSong()
+  renderScoreSong()
 }
 
 async function ensureAudioEngine() {
@@ -122,12 +164,21 @@ function playClick() {
 
 function fillSongSelect(select) {
   select.innerHTML = songs.map((song, index) => (
-    `<option value="${index}">${song.artist}《${song.title}》 - ${song.bpm} BPM</option>`
+    `<option value="${index}">${song.artist}《${song.title}》 - ${getSongBpm(song)} BPM</option>`
   )).join('')
 }
 
 fillSongSelect($('#musicSong'))
 fillSongSelect($('#scoreSong'))
+
+function refreshSongSelects() {
+  const musicIndex = $('#musicSong').value
+  const scoreIndex = $('#scoreSong').value
+  fillSongSelect($('#musicSong'))
+  fillSongSelect($('#scoreSong'))
+  $('#musicSong').value = musicIndex
+  $('#scoreSong').value = scoreIndex
+}
 
 function currentMusicSong() {
   return songs[Number($('#musicSong').value || 0)]
@@ -140,8 +191,9 @@ function currentScoreSong() {
 function renderMusicSong() {
   const song = currentMusicSong()
   const offset = getBeatOffset(song)
-  $('#musicMeta').textContent = `${song.artist} · ${song.bpm} BPM · ${song.meter}`
-  $('#musicAnalysis').textContent = `音谱分析初值 ${song.firstBeatOffset.toFixed(3)} 秒 · 已用校准 ${offset.toFixed(3)} 秒 · 时长 ${song.duration.toFixed(1)} 秒`
+  const analysis = getStoredAnalysis(song)
+  $('#musicMeta').textContent = `${song.artist} · ${getSongBpm(song)} BPM · ${song.meter}`
+  $('#musicAnalysis').textContent = `${analysis ? '专业分析' : '内置初值'}：BPM ${getSongBpm(song)} · 起拍 ${offset.toFixed(3)} 秒 · 时长 ${song.duration.toFixed(1)} 秒`
   $('#musicOffsetValue').textContent = `${Math.round(offset * 1000)}ms`
   $('#musicPath').textContent = `文件路径：${song.src}`
   if (!state.musicPlaying && !state.scoreRunning) {
@@ -153,8 +205,9 @@ function renderMusicSong() {
 function renderScoreSong() {
   const song = currentScoreSong()
   const offset = getBeatOffset(song)
-  $('#scoreMeta').textContent = `${song.artist} · ${song.bpm} BPM · ${song.meter}`
-  $('#scoreAnalysis').textContent = `音谱分析初值 ${song.firstBeatOffset.toFixed(3)} 秒 · 已用校准 ${offset.toFixed(3)} 秒`
+  const analysis = getStoredAnalysis(song)
+  $('#scoreMeta').textContent = `${song.artist} · ${getSongBpm(song)} BPM · ${song.meter}`
+  $('#scoreAnalysis').textContent = `${analysis ? '专业分析' : '内置初值'}：BPM ${getSongBpm(song)} · 起拍 ${offset.toFixed(3)} 秒`
 }
 
 function renderBeatGrid(meter, activeIndex) {
@@ -310,7 +363,7 @@ function previewMusicBeat() {
     beat += 1
     musicPulse(beat)
     if (beat >= Number(song.meter.split('/')[0]) * 2) stopMusic()
-  }, intervalFromBpm(song.bpm))
+  }, intervalFromBpm(getSongBpm(song)))
 }
 
 async function startMusic() {
@@ -434,6 +487,38 @@ $('#markFirstBeat').addEventListener('click', () => {
   clearTimeout(state.musicGuideTimer)
   if (state.musicPlaying) scheduleMusicGuide(song)
 })
+$('#analyzeBeat').addEventListener('click', async () => {
+  const song = currentMusicSong()
+  const button = $('#analyzeBeat')
+  const previousText = button.textContent
+  try {
+    button.textContent = '分析中...'
+    button.disabled = true
+    await ensureAudioEngine()
+    const [{ guess }, response] = await Promise.all([
+      import('https://esm.sh/web-audio-beat-detector@8.2.36?bundle'),
+      fetch(song.src)
+    ])
+    const arrayBuffer = await response.arrayBuffer()
+    const audioBuffer = await state.audioContext.decodeAudioData(arrayBuffer)
+    const result = await guess(audioBuffer, { minTempo: 55, maxTempo: 180 })
+    const detectedBpm = result.tempo || result.bpm
+    const detectedOffset = result.offset ?? song.firstBeatOffset
+    setSongAnalysis(song, detectedBpm, detectedOffset)
+    $('#musicPath').textContent = `已应用分析结果：${Math.round(detectedBpm)} BPM，起拍 ${detectedOffset.toFixed(3)} 秒。`
+    if (state.musicPlaying) {
+      clearInterval(state.musicGuideTimer)
+      state.musicNextBeatNumber = nextBeatNumber(song)
+      scheduleMusicGuide(song)
+      state.musicGuideTimer = setInterval(() => scheduleMusicGuide(song), 25)
+    }
+  } catch (error) {
+    $('#musicPath').textContent = '分析失败，请检查网络或稍后再试。'
+  } finally {
+    button.disabled = false
+    button.textContent = previousText
+  }
+})
 musicAudio.addEventListener('ended', () => {
   if (state.scoreRunning) {
     stopScore()
@@ -452,7 +537,7 @@ function setScoreMode(mode) {
 }
 
 function currentScoreBpm() {
-  return state.scoreMode === 'music' ? currentScoreSong().bpm : Number($('#scoreBpm').value)
+  return state.scoreMode === 'music' ? getSongBpm(currentScoreSong()) : Number($('#scoreBpm').value)
 }
 
 function startScore() {
