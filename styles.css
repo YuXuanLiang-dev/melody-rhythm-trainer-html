@@ -169,6 +169,20 @@ select {
   margin-bottom: 16px;
 }
 
+.button-row.compact {
+  margin: 10px 0;
+}
+
+.wide {
+  width: 100%;
+}
+
+.calibration {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
 .primary,
 .secondary,
 .segment,

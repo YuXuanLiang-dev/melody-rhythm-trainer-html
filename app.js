@@ -38,6 +38,32 @@ function intervalFromBpm(bpm) {
   return 60000 / Number(bpm)
 }
 
+function intervalSeconds(song) {
+  return 60 / song.bpm
+}
+
+function songOffsetKey(song) {
+  return `beat-offset:${song.src}`
+}
+
+function normalizeOffset(value, interval) {
+  return ((value % interval) + interval) % interval
+}
+
+function getBeatOffset(song) {
+  const saved = localStorage.getItem(songOffsetKey(song))
+  const parsed = saved === null ? NaN : Number(saved)
+  return Number.isFinite(parsed) ? parsed : song.firstBeatOffset
+}
+
+function setBeatOffset(song, value) {
+  const offset = normalizeOffset(value, intervalSeconds(song))
+  localStorage.setItem(songOffsetKey(song), String(offset))
+  renderMusicSong()
+  renderScoreSong()
+  return offset
+}
+
 function playClick() {
   clickAudio.currentTime = 0
   clickAudio.play().catch(() => {})
@@ -63,17 +89,22 @@ function currentScoreSong() {
 
 function renderMusicSong() {
   const song = currentMusicSong()
+  const offset = getBeatOffset(song)
   $('#musicMeta').textContent = `${song.artist} · ${song.bpm} BPM · ${song.meter}`
-  $('#musicAnalysis').textContent = `音谱分析：起拍偏移 ${song.firstBeatOffset.toFixed(3)} 秒 · 时长 ${song.duration.toFixed(1)} 秒`
+  $('#musicAnalysis').textContent = `音谱分析初值 ${song.firstBeatOffset.toFixed(3)} 秒 · 已用校准 ${offset.toFixed(3)} 秒 · 时长 ${song.duration.toFixed(1)} 秒`
+  $('#musicOffsetValue').textContent = `${Math.round(offset * 1000)}ms`
   $('#musicPath').textContent = `文件路径：${song.src}`
-  musicAudio.src = song.src
+  if (!state.musicPlaying && !state.scoreRunning) {
+    musicAudio.src = song.src
+  }
   renderBeatGrid(song.meter, -1)
 }
 
 function renderScoreSong() {
   const song = currentScoreSong()
+  const offset = getBeatOffset(song)
   $('#scoreMeta').textContent = `${song.artist} · ${song.bpm} BPM · ${song.meter}`
-  $('#scoreAnalysis').textContent = `音谱分析：起拍偏移 ${song.firstBeatOffset.toFixed(3)} 秒 · 时长 ${song.duration.toFixed(1)} 秒`
+  $('#scoreAnalysis').textContent = `音谱分析初值 ${song.firstBeatOffset.toFixed(3)} 秒 · 已用校准 ${offset.toFixed(3)} 秒`
 }
 
 function renderBeatGrid(meter, activeIndex) {
@@ -161,6 +192,42 @@ function musicPulse(beat) {
   if ($('#musicGuide').checked) playClick()
 }
 
+function nextBeatNumber(song) {
+  const interval = intervalSeconds(song)
+  const offset = getBeatOffset(song)
+  const current = musicAudio.currentTime
+  return Math.max(0, Math.ceil((current - offset) / interval))
+}
+
+function scheduleMusicGuide(song) {
+  if (!state.musicPlaying) return
+  const interval = intervalSeconds(song)
+  const beatNumber = nextBeatNumber(song)
+  const beatTime = getBeatOffset(song) + beatNumber * interval
+  const delay = Math.max(0, (beatTime - musicAudio.currentTime) * 1000)
+
+  state.musicGuideTimer = setTimeout(() => {
+    if (!state.musicPlaying) return
+    renderBeatGrid(song.meter, beatNumber % Number(song.meter.split('/')[0]))
+    if ($('#musicGuide').checked) playClick()
+    scheduleMusicGuide(song)
+  }, delay)
+}
+
+function scheduleScoreMusicGuide(song) {
+  if (!state.scoreRunning) return
+  const interval = intervalSeconds(song)
+  const beatNumber = nextBeatNumber(song)
+  const beatTime = getBeatOffset(song) + beatNumber * interval
+  const delay = Math.max(0, (beatTime - musicAudio.currentTime) * 1000)
+
+  state.scoreTimer = setTimeout(() => {
+    if (!state.scoreRunning) return
+    playClick()
+    scheduleScoreMusicGuide(song)
+  }, delay)
+}
+
 function previewMusicBeat() {
   if (state.musicPreviewing) {
     stopMusic()
@@ -182,27 +249,16 @@ function previewMusicBeat() {
 function startMusic() {
   stopMusic()
   const song = currentMusicSong()
-  const interval = intervalFromBpm(song.bpm)
   state.musicPlaying = true
   $('#musicToggle').textContent = '停止'
   $('#musicToggle').classList.add('danger')
-
-  const beginGuide = () => {
-    if (!state.musicPlaying) return
-    let beat = 0
-    musicPulse(beat)
-    state.musicGuideTimer = setInterval(() => {
-      beat += 1
-      musicPulse(beat)
-    }, interval)
-  }
 
   musicAudio.src = song.src
   musicAudio.currentTime = 0
   musicAudio.onplaying = () => {
     if (!state.musicPlaying) return
-    clearTimeout(state.musicGuideStartTimer)
-    state.musicGuideStartTimer = setTimeout(beginGuide, song.firstBeatOffset * 1000)
+    clearTimeout(state.musicGuideTimer)
+    scheduleMusicGuide(song)
   }
   musicAudio.play().catch(() => {
     stopMusic()
@@ -225,10 +281,9 @@ function startScoreMusic(song, interval) {
   state.scoreStartAt = 0
   musicAudio.onplaying = () => {
     if (!state.scoreRunning) return
-    const offsetMs = song.firstBeatOffset * 1000
-    state.scoreStartAt = Date.now() + offsetMs
-    clearTimeout(state.scoreGuideStartTimer)
-    state.scoreGuideStartTimer = setTimeout(() => startScoreGuide(interval), offsetMs)
+    state.scoreStartAt = 1
+    clearTimeout(state.scoreTimer)
+    scheduleScoreMusicGuide(song)
   }
   musicAudio.play().catch(() => {
     stopScore()
@@ -255,6 +310,7 @@ function startScoreRhythm(interval) {
 
 function stopMusic() {
   clearInterval(state.musicGuideTimer)
+  clearTimeout(state.musicGuideTimer)
   clearInterval(state.musicCountTimer)
   clearTimeout(state.musicGuideStartTimer)
   state.musicGuideTimer = null
@@ -276,6 +332,32 @@ $('#musicToggle').addEventListener('click', () => state.musicPlaying ? stopMusic
 $('#musicSong').addEventListener('change', () => {
   stopMusic()
   renderMusicSong()
+})
+$('#offsetEarlier').addEventListener('click', () => {
+  const song = currentMusicSong()
+  setBeatOffset(song, getBeatOffset(song) - 0.05)
+  if (state.musicPlaying) {
+    clearTimeout(state.musicGuideTimer)
+    scheduleMusicGuide(song)
+  }
+})
+$('#offsetLater').addEventListener('click', () => {
+  const song = currentMusicSong()
+  setBeatOffset(song, getBeatOffset(song) + 0.05)
+  if (state.musicPlaying) {
+    clearTimeout(state.musicGuideTimer)
+    scheduleMusicGuide(song)
+  }
+})
+$('#markFirstBeat').addEventListener('click', () => {
+  const song = currentMusicSong()
+  if (musicAudio.paused) {
+    $('#musicPath').textContent = '先播放音乐，听到第一拍时再点“此刻是第一拍”。'
+    return
+  }
+  setBeatOffset(song, musicAudio.currentTime)
+  clearTimeout(state.musicGuideTimer)
+  if (state.musicPlaying) scheduleMusicGuide(song)
 })
 musicAudio.addEventListener('ended', () => {
   if (state.scoreRunning) {
@@ -363,10 +445,25 @@ function recordTap() {
     return
   }
   const interval = intervalFromBpm(currentScoreBpm())
+  if (state.scoreMode === 'music') {
+    const song = currentScoreSong()
+    const beatInterval = intervalSeconds(song)
+    const offset = getBeatOffset(song)
+    const elapsedAudio = musicAudio.currentTime - offset
+    const nearestBeat = Math.round(elapsedAudio / beatInterval)
+    const hitOffset = Math.abs(musicAudio.currentTime - (offset + nearestBeat * beatInterval)) * 1000
+    state.taps.push(hitOffset)
+    updateScore()
+    return
+  }
   const elapsed = now - state.scoreStartAt
   const nearestBeat = Math.round(elapsed / interval)
   const offset = Math.abs(now - (state.scoreStartAt + nearestBeat * interval))
   state.taps.push(offset)
+  updateScore()
+}
+
+function updateScore() {
   const avg = state.taps.reduce((sum, item) => sum + item, 0) / state.taps.length
   const best = Math.min(...state.taps)
   const score = Math.max(0, Math.round(100 - avg / 2))
